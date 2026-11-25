@@ -1,12 +1,18 @@
 // Robot Romance: One-Line Pickup Lines for AI
-// Reads ./entry.txt, validates the bounty gate (1-200 characters,
-// exactly one line), writes it verbatim to /output/entry.txt, and
+// Reads entry.txt (resolved relative to this script file, NOT the
+// current working directory), validates the bounty gate (1-200
+// characters, exactly one line), writes it verbatim to
+// $MAKEFUN_OUTPUT_DIR/entry.txt (default /output/entry.txt), and
 // verifies the copy is byte-identical to the source.
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
-const SOURCE = "./entry.txt";
-const DEST = "/output/entry.txt";
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SOURCE = join(SCRIPT_DIR, "entry.txt");
+const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR || "/output";
+const DEST = join(OUTPUT_DIR, "entry.txt");
 const MIN_CHARS = 1;
 const MAX_CHARS = 200;
 
@@ -15,7 +21,16 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const raw = readFileSync(SOURCE, "utf8");
+let raw: string;
+try {
+  raw = readFileSync(SOURCE, "utf8");
+} catch (err) {
+  fail(
+    `cannot read entry file at ${SOURCE} (resolved from script directory ${SCRIPT_DIR}): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+  );
+}
 const entry = raw.trim();
 
 if (entry.length < MIN_CHARS) {
@@ -36,19 +51,27 @@ if (entry.includes("\n") || entry.includes("\r")) {
 
 const byteLength = Buffer.byteLength(entry, "utf8");
 
-mkdirSync("/output", { recursive: true });
-// Write the source file verbatim (including its trailing newline) so the
-// output is byte-identical to ./entry.txt.
-writeFileSync(DEST, raw, "utf8");
+try {
+  mkdirSync(OUTPUT_DIR, { recursive: true });
+  // Write the source file verbatim (including its trailing newline) so the
+  // output is byte-identical to entry.txt.
+  writeFileSync(DEST, raw, "utf8");
+} catch (err) {
+  fail(
+    `cannot write output file at ${DEST} (output directory ${OUTPUT_DIR} from MAKEFUN_OUTPUT_DIR): ${
+      err instanceof Error ? err.message : String(err)
+    }`,
+  );
+}
 
 // Verify the written file is byte-identical to the source entry.
 const written = readFileSync(DEST, "utf8");
 if (written !== raw) {
-  fail(`${DEST} does not match ./entry.txt after writing.`);
+  fail(`${DEST} does not match ${SOURCE} after writing.`);
 }
 
 console.log(entry);
 console.log(
   `OK: ${entry.length} characters (${byteLength} UTF-8 bytes), 1 line, ` +
-    `written to ${DEST} and verified byte-identical to ./entry.txt.`,
+    `written to ${DEST} and verified byte-identical to ${SOURCE}.`,
 );
